@@ -3,9 +3,6 @@ from telegram.ext import ContextTypes
 import PyPDF2
 import io
 from typing import Dict
-import easyocr
-import cv2
-import numpy as np
 from Session import UserSession
 import threading
 from openai import OpenAI

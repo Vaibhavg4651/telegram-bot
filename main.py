@@ -22,6 +22,8 @@ BOT_NAME: Final = os.getenv("BOT_NAME")
 application = (Application.builder().token(TOKEN).connect_timeout(20).read_timeout(120).build())
 
 
+public_url= os.getenv('PUBLIC_URL')
+
 @asynccontextmanager
 async def setup_webhook( _: FastAPI):
     webhook_url = f"{public_url}/telegram"
@@ -53,17 +55,15 @@ application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_me
 
 
 def main() -> None:
-    port = 5000
-    global public_url
-    public_url = ngrok.connect(port).public_url
-    logger.info(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{port}\"")
+    # public_url = ngrok.connect(port).public_url
+    # logger.info(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{port}\"")
     
     # Manually run the event loop for the async setup_webhook
     # loop = asyncio.get_event_loop()
     # loop.run_until_complete(setup_webhook(application, public_url))
 
     # Run FastAPI app
-    uvicorn.run(app, port=port)
+    uvicorn.run(app)
 
 if __name__ == '__main__':
     main()
