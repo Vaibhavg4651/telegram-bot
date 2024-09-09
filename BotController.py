@@ -8,7 +8,18 @@ import cv2
 import numpy as np
 from Session import UserSession
 import threading
+from openai import OpenAI
+import os
+from dotenv import load_dotenv
+import base64
 
+load_dotenv()
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+
+client = OpenAI(
+    api_key=openai_api_key
+)
 
 
 user_sessions: Dict[int, UserSession] = {}
@@ -52,27 +63,32 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def process_message(message, context):
-    policiesText = ""
+    content = []
     if message.document and message.document.mime_type == 'application/pdf':
         file = await context.bot.get_file(message.document.file_id)
         f = io.BytesIO(await file.download_as_bytearray())
         pdf_reader = PyPDF2.PdfReader(f)
         policiesText = "\n".join([page.extract_text() for page in pdf_reader.pages])
+        content.append({"type": "text", "text": f"PDF Content:\n{policiesText}"})
     
     elif message.photo:
         file = await context.bot.get_file(message.photo[-1].file_id)
         file_bytes = await file.download_as_bytearray()
-        np_arr = np.frombuffer(file_bytes, np.uint8)
-        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        reader = easyocr.Reader(['en'])
-        result = reader.readtext(image)
-        for(_, text, _) in result:
-            policiesText += text+" "
-        if message.caption:
-            policiesText += "\n\nImage Caption: " + message.caption
+        base64_image = base64.b64encode(file_bytes).decode('utf-8')
+
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}"
+            }
+        })
+    
     else:
-        policiesText = message.text or ""
-    return policiesText
+        content.append({"type": "text", "text": f"Text Message:\n{message.text}"})
+    if message.caption:
+        content.append({"type": "text", "text": f"Caption:\n{message.caption}"})
+
+    return content
 
 
 
@@ -119,11 +135,48 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
     if chat_id is None:
         chat_id = update.effective_chat.id
     session = get_user_session(chat_id)
-
+    response_Data = ""
     data = session.policy_messages[:5]
+    
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Please analyze the following content and provide all the data. For images, describe the visible content and extract any text or policy information you can see. And dont add messages from your side just send the data and dont add anything regarding upgrading the account or contact help center at openai.com and other such messages regarding continue the conversation. Also give the caption in the starting if there is any specified in the message."
+                }
+            ]
+        }
+    ]
 
-    if data:
-        response = "Here are the collected policies:\n\n" + "\n\n".join(data)
+    for sublist in data:
+        for item in sublist:
+            if item["type"] == "text":
+                messages[0]["content"].append({"type": "text", "text": item["text"]})
+            elif item["type"] == "image_url":
+                messages[0]["content"].append({
+                    "type": "image_url",
+                    "image_url": item["image_url"]
+                })
+
+    if messages[0]["content"]:
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=500
+            )
+            response_Data = response.choices[0].message.content
+            response_Data = response_Data.replace("\n", "").replace("\n\n", "\n").strip()
+        except Exception as e:
+            response_Data = f"Error processing content: {str(e)}"
+    else:
+        response_Data = ""
+
+
+    if response_Data:
+        response = f"Here are the collected policies:\n\n{response_Data}"
         if len(response) > 4096:
             response = response[:4093] + "..."  # Telegram message limit is 4096 characters
         if update:
