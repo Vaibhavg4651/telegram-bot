@@ -3,6 +3,8 @@ from datetime import datetime
 import httpx
 import json
 from typing import Dict, Any
+from dotenv import load_dotenv
+import os
 
 def transform_json(input_data):
     # Define the mapping between input keys and output columns
@@ -54,8 +56,8 @@ def transform_json(input_data):
 
 
 async def send_to_coda(response_Data: Dict[str, Any]):
-    CODA_API_URL = "https://coda.io/apis/v1/docs/aZvIVxJJNf/tables/grid-PWZ090IDdd/rows"
-    CODA_API_KEY = "78655b8e-dd18-49a7-87ef-b9f04753b4cb"  # Replace with your actual Coda API key
+    CODA_API_URL = os.getenv("CODA_API_URL")
+    CODA_API_KEY = os.getenv("CODA_API_KEY")  # Replace with your actual Coda API key
 
     headers = {
         "Authorization": f"Bearer {CODA_API_KEY}",
