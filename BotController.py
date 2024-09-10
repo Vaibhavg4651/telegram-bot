@@ -227,7 +227,7 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
                     [Message]
 
 
-                    Only reply in JSON and does not include the word json just give it in {} format, and include all the information asked and give N/A for any information which you are not able to retrieve, do not give any other remarks or message along JSON.
+                    Only reply in JSON and does not include the word json just give it in this {} format, and include all the information asked and give N/A for any information which you are not able to retrieve, do not give any other remarks or message along JSON.
 
                     '''
                 }
@@ -258,7 +258,8 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
     else:
         response_Data = "{}"
 
-    # response_Data = response_Data[7:].strip()
+    if response_Data.startswith("json"):
+        response_Data = response_Data[7:].strip()
     print(response_Data)
 
     processed_data = {}
@@ -279,6 +280,13 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
                 processed_data = {"error": "No valid JSON object found in GPT response"}
 
         print("Processed data:", processed_data)  # For debugging
+
+        if all(value == "N/A" for value in processed_data.values()):
+            message = "No policies were captured." if update else "Policy capture session ended without any messages."
+            if update:
+                await update.message.reply_text(message)
+            session.end_capture()
+            return
         
         message_id = session.message_id
         username = session.username or ""
@@ -290,7 +298,7 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
             "username": username,
             "Date": str(formatted_date)
         })
-        print(processed_data)
+    
         await send_to_coda(processed_data)
         
         session.end_capture()

@@ -79,11 +79,6 @@ application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_me
 #     public_url = ngrok.connect(port).public_url
 #     logger.info(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{port}\"")
     
-#     # Manually run the event loop for the async setup_webhook
-#     # loop = asyncio.get_event_loop()
-#     # loop.run_until_complete(setup_webhook(application, public_url))
-
-#     # Run FastAPI app
 #     uvicorn.run(app, port=port)
 
 # if __name__ == '__main__':
