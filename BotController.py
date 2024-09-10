@@ -276,8 +276,12 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
                     processed_data = json.loads(match.group())
                 except json.JSONDecodeError:
                     processed_data = {"error": "Failed to parse JSON from GPT response"}
+                    await update.message.reply_text("No policies were captured. Please try again with /policies.")
+                    return
             else:
                 processed_data = {"error": "No valid JSON object found in GPT response"}
+                await update.message.reply_text("No policies were captured. Please try again with /policies.")
+                return
 
         print("Processed data:", processed_data)  # For debugging
 
