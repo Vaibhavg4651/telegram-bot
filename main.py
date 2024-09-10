@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 from BotController import handle_message , policies, end
 from pyngrok import ngrok
+import httpx
 from http import HTTPStatus
 from telegram import Update
 import uvicorn
@@ -20,9 +21,9 @@ logger = logging.getLogger(__name__)
 TOKEN: Final = os.getenv("TOKEN")
 BOT_NAME: Final = os.getenv("BOT_NAME")
 application = (Application.builder().token(TOKEN).connect_timeout(20).read_timeout(120).build())
+forward_url = os.getenv("SUCH_CHAT_URL")
+public_url = os.getenv("PUBLIC_URL")
 
-
-public_url= os.getenv('PUBLIC_URL')
 
 @asynccontextmanager
 async def setup_webhook( _: FastAPI):
@@ -41,12 +42,30 @@ app = FastAPI(lifespan=setup_webhook)
 def home():
     return {"Hello": "World"}
 
+
 @app.post(f'/telegram')
 async def webhook( request: Request):
-    req = await request.json()
-    update = Update.de_json(req, application.bot)
-    await application.process_update(update)
-    return Response(status_code=HTTPStatus.OK)
+    try:
+        req = await request.json()
+        update = Update.de_json(req, application.bot)
+        await application.process_update(update)
+        async with httpx.AsyncClient() as client:
+            await client.post(forward_url, json=req, timeout=10.0)
+        return Response(status_code=HTTPStatus.OK)
+    except httpx.RequestError as e:
+        # This exception is raised for network-related errors
+        logger.error(f"An error occurred while forwarding the request: {e}")
+        return Response(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    except httpx.HTTPStatusError as e:
+        # This exception is raised when the forwarded request returns a 4xx or 5xx status code
+        logger.error(f"Error response {e.response.status_code} while forwarding the request: {e}")
+        return Response(status_code=HTTPStatus.BAD_GATEWAY)
+
+    except Exception as e:
+        # Catch any other unexpected errors
+        logger.error(f"An unexpected error occurred: {e}")
+        return Response(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
 application.add_handler(CommandHandler("policies", policies))
@@ -54,16 +73,18 @@ application.add_handler(CommandHandler("end", end))
 application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
 
 
-def main() -> None:
-    # public_url = ngrok.connect(port).public_url
-    # logger.info(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{port}\"")
+# def main() -> None:
+#     port = 5000
+#     global public_url
+#     public_url = ngrok.connect(port).public_url
+#     logger.info(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{port}\"")
     
-    # Manually run the event loop for the async setup_webhook
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(setup_webhook(application, public_url))
+#     # Manually run the event loop for the async setup_webhook
+#     # loop = asyncio.get_event_loop()
+#     # loop.run_until_complete(setup_webhook(application, public_url))
 
-    # Run FastAPI app
-    uvicorn.run(app)
+#     # Run FastAPI app
+#     uvicorn.run(app, port=port)
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()

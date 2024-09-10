@@ -9,6 +9,10 @@ from openai import OpenAI
 import os
 from dotenv import load_dotenv
 import base64
+from transform_json import send_to_coda
+import re
+import json
+from datetime import datetime
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -43,8 +47,8 @@ async def policies(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def start_policy_capture(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
     session = get_user_session(chat_id)
-    session.start_capture()
-    await context.bot.send_message(chat_id=chat_id, text="Started capturing policies. Send /end when you're finished, or wait 2 minutes for auto-capture.")
+    print(update)
+    session.start_capture(update)
     context.job_queue.run_once(check_timeout, 120, chat_id=chat_id, name=str(chat_id))
 
 
@@ -53,7 +57,7 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     session = get_user_session(chat_id)
     if session.capturing_policies:
-        await send_collected_policies(update, context)
+        await send_collected_policies(update, context,chat_id)
     else:
         await update.message.reply_text("No active policy capture session. Start with /policies first.")
 
@@ -123,63 +127,171 @@ async def check_timeout(context: ContextTypes.DEFAULT_TYPE) -> None:
     if session.capturing_policies:
         if not session.min_messages_reached:
             await send_collected_policies(None, context, int(chat_id))  # Convert chat_id to int
+            await context.bot.send_message(chat_id=int(chat_id), text="Policies saved.")
         else:
             await context.bot.send_message(chat_id=int(chat_id), text="Auto Policy capture session ended.")  # Convert chat_id to int
 
 
 
-async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id=None) -> None:
-    if chat_id is None:
-        chat_id = update.effective_chat.id
+async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id) -> None:
+    print(context)
     session = get_user_session(chat_id)
-    response_Data = ""
+    response_Data = "{}"
     data = session.policy_messages[:5]
-    
+
     messages = [
         {
             "role": "user",
             "content": [
                 {
                     "type": "text",
-                    "text": "Please analyze the following content and provide all the data. For images, describe the visible content and extract any text or policy information you can see. And dont add messages from your side just send the data and dont add anything regarding upgrading the account or contact help center at openai.com and other such messages regarding continue the conversation. Also give the caption in the starting if there is any specified in the message."
+                    "text": '''Help me find all the details from the images and message below, only reply in JSON structure given with all the information.
+
+                    {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                    "RegistrationNo": {
+                    "type": "string",
+                    "description": "The registration number of the vehicle as given in the documents."
+                    },
+                    "ManufacturingYear": {
+                    "type": "string",
+                    "description": "The year in which the vehicle was manufactured as given in the documents."
+                    },
+                    "MakeModelVariant": {
+                    "type": "string",
+                    "description": "The make, model, and variant of the vehicle as given in the documents."
+                    },
+                    "SeatingCapacity": {
+                    "type": "string",
+                    "description": "The seating capacity of the vehicle as given in the documents."
+                    },
+                    "FuelType": {
+                    "type": "string",
+                    "description": "The type of fuel used by the vehicle as given in the documents."
+                    },
+                    "CubicCapacity": {
+                    "type": "string",
+                    "description": "The cubic capacity (CC) of the vehicle's engine as given in the documents."
+                    },
+                    "VehicleIDV": {
+                    "type": "string",
+                    "description": "The Insured Declared Value (IDV) of the vehicle as given in the documents."
+                    },
+                    "NoClaimBonus": {
+                    "type": "string",
+                    "description": "The percentage of No Claim Bonus (NCB) applicable to the vehicle as given in the documents."
+                    },
+                    "ExpiryDate": {
+                    "type": "string",
+                    "description": "The expiry date of the vehicle insurance policy as given in the documents."
+                    },
+                    "ClaimConfirmation": {
+                    "type": "string",
+                    "enum": ["Yes", "No", "N/A"],
+                    "description": "Did the customer confirm any claims on the vehicle as given in the documents? Reply 'Yes', 'No', or 'N/A'."
+                    },
+                    "AddOns": {
+                    "type": "string",
+                    "description": "Any additional coverage or add-ons on the vehicle insurance policy as given in the documents."
+                    },
+                    "CompanyName": {
+                    "type": "string",
+                    "description": "The name of the insurance company providing coverage for the vehicle as given in the documents."
+                    },
+                    "LastYearPremium": {
+                    "type": "string",
+                    "description": "The amount of the premium paid for the last year as given in the documents."
+                    }
+                    },
+                    "required": [
+                    "RegistrationNo",
+                    "ManufacturingYear",
+                    "MakeModelVariant",
+                    "SeatingCapacity",
+                    "FuelType",
+                    "CubicCapacity",
+                    "VehicleIDV",
+                    "NoClaimBonus",
+                    "ExpiryDate",
+                    "ClaimConfirmation",
+                    "AddOns",
+                    "CompanyName",
+                    "LastYearPremium"
+                    ],
+                    "additionalProperties": false
+                    }
+
+
+                    [Message]
+
+
+                    Only reply in JSON and does not include the word json just give it in {} format, and include all the information asked and give N/A for any information which you are not able to retrieve, do not give any other remarks or message along JSON.
+
+                    '''
                 }
             ]
         }
     ]
+    if data:
+        for sublist in data:
+            for item in sublist:
+                if item["type"] == "text":
+                    messages[0]["content"].append({"type": "text", "text": item["text"]})
+                elif item["type"] == "image_url":
+                    messages[0]["content"].append({
+                        "type": "image_url",
+                        "image_url": item["image_url"]
+                    })
 
-    for sublist in data:
-        for item in sublist:
-            if item["type"] == "text":
-                messages[0]["content"].append({"type": "text", "text": item["text"]})
-            elif item["type"] == "image_url":
-                messages[0]["content"].append({
-                    "type": "image_url",
-                    "image_url": item["image_url"]
-                })
-
-    if messages[0]["content"]:
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=500
-            )
-            response_Data = response.choices[0].message.content
-            response_Data = response_Data.replace("\n", "").replace("\n\n", "\n").strip()
-        except Exception as e:
-            response_Data = f"Error processing content: {str(e)}"
+        if messages[0]["content"]:
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    max_tokens=500
+                )
+                response_Data = response.choices[0].message.content
+            except Exception as e:
+                response_Data = f"Error processing content: {str(e)}"
     else:
-        response_Data = ""
+        response_Data = "{}"
 
+    # response_Data = response_Data[7:].strip()
+    print(response_Data)
 
-    if response_Data:
-        response = f"Here are the collected policies:\n\n{response_Data}"
-        if len(response) > 4096:
-            response = response[:4093] + "..."  # Telegram message limit is 4096 characters
-        if update:
-            await update.message.reply_text(response)
-        else:
-            await context.bot.send_message(chat_id=chat_id, text=response)
+    processed_data = {}
+
+    if response_Data and response_Data != "{}":
+        try:
+            # Attempt to parse the entire response as JSON
+            processed_data = json.loads(response_Data)
+        except json.JSONDecodeError:
+            # If that fails, try to find a JSON object within the string
+            match = re.search(r'\{.*\}', response_Data)
+            if match:
+                try:
+                    processed_data = json.loads(match.group())
+                except json.JSONDecodeError:
+                    processed_data = {"error": "Failed to parse JSON from GPT response"}
+            else:
+                processed_data = {"error": "No valid JSON object found in GPT response"}
+
+        print("Processed data:", processed_data)  # For debugging
+        
+        message_id = session.message_id
+        username = session.username or ""
+        formatted_date = datetime.now().strftime("%d/%m/%y")
+
+        processed_data.update({
+            "chat_id": str(chat_id),
+            "message_id": str(message_id),
+            "username": username,
+            "Date": str(formatted_date)
+        })
+        print(processed_data)
+        await send_to_coda(processed_data)
         
         session.end_capture()
     else:
