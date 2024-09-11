@@ -101,13 +101,13 @@ application.add_handler(CommandHandler("end", end))
 application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
 
 
-def main() -> None:
-    port = 5000
-    global public_url
-    public_url = ngrok.connect(port).public_url
-    logger.info(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{port}\"")
+# def main() -> None:
+#     port = 5000
+#     global public_url
+#     public_url = ngrok.connect(port).public_url
+#     logger.info(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:{port}\"")
     
-    uvicorn.run(app, port=port)
+#     uvicorn.run(app, port=port)
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
