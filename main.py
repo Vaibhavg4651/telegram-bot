@@ -47,8 +47,16 @@ def home():
 async def webhook( request: Request):
     try:
         req = await request.json()
+        
         update = Update.de_json(req, application.bot)
+        
         await application.process_update(update)
+        
+        if 'message' in req and 'text' in req['message']:
+            text = req['message']['text']
+            if text.startswith('/'):
+                # If it's a slash command, don't forward to the API
+                return Response(status_code=HTTPStatus.OK)
         async with httpx.AsyncClient() as client:
             await client.post(forward_url, json=req, timeout=10.0)
         return Response(status_code=HTTPStatus.OK)
