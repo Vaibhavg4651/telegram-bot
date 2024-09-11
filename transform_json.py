@@ -37,11 +37,10 @@ def transform_json(input_data):
 
     # Add additional fields with "Vaibhav" as the value
     additional_columns = [
-        "c-md7TDM1BNP", "c-nwjX-Xlu7c", "c-UbW21g2ySx"
-
+        "c-md7TDM1BNP", "c-UbW21g2ySx"
     ]
     cells.extend([{"column": col, "value": ""} for col in additional_columns])
-
+    cells.append({"column": "c-nwjX-Xlu7c", "value": "open"})
     # Create the output structure
     output = {
         "rows": [

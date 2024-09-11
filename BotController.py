@@ -127,8 +127,9 @@ async def check_timeout(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if session.capturing_policies:
         if not session.min_messages_reached:
-            await send_collected_policies(None, context, int(chat_id))  # Convert chat_id to int
-            await context.bot.send_message(chat_id=int(chat_id), text="Policies saved.")
+            message_sent = await send_collected_policies(None, context, int(chat_id))  # Convert chat_id to int
+            if not message_sent:
+                await context.bot.send_message(chat_id=int(chat_id), text="Policies saved.")
         else:
             await context.bot.send_message(chat_id=int(chat_id), text="Auto Policy capture session ended.")  # Convert chat_id to int
 
@@ -287,8 +288,7 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
                 message = "No policies were captured." if update else "Policy capture session ended without any messages."
                 if update:
                     await update.message.reply_text(message)
-                session.end_capture()
-                return
+                return True
             
             message_id = session.message_id
             username = session.username or ""
@@ -304,17 +304,20 @@ async def send_collected_policies(update: Update, context: ContextTypes.DEFAULT_
             await send_to_coda(processed_data)
             print("Data sent to Coda")
             await send_message(update, context, chat_id,"All the policies are captured.")
+            return True
         else:
             raise ValueError("No policies were captured")
+            
 
     except Exception as e:
         error_message = f"An error occurred: {str(e)}"
         print(error_message)
         await send_message(update, context, chat_id, "No policies were captured. Please start with /policies again.")
-
+        return False
     finally:
         session.end_capture()
 
+    return False
 
 async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str):
     if update and update.message:
