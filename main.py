@@ -10,6 +10,7 @@ import httpx
 from http import HTTPStatus
 from telegram import Update
 import uvicorn
+import asyncio
 from fastapi import FastAPI, Request,Response
 
 
@@ -42,6 +43,24 @@ app = FastAPI(lifespan=setup_webhook)
 def home():
     return {"Hello": "World"}
 
+@app.get("/wake-up")
+async def wake_up():
+    return {"status": "awake"}
+
+
+
+async def health_check():
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{public_url}/wake-up")
+                if response.status_code == 200:
+                    logger.info("Health check successful")
+                else:
+                    logger.warning(f"Health check failed with status code: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Health check failed: {str(e)}")
+        await asyncio.sleep(840)  # 14 minutes
 
 @app.post(f'/telegram')
 async def webhook( request: Request):

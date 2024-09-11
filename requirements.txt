@@ -8,3 +8,4 @@ python-dotenv==1.0.1
 python-telegram-bot==21.5
 uvicorn==0.30.6
 python-telegram-bot[job-queue]==21.5
+asyncio=3.4.3
